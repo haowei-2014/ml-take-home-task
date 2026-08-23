@@ -12,7 +12,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.metrics import cohen_kappa_score
-from sklearn.model_selection import GroupKFold, KFold
+from sklearn.model_selection import (GroupKFold, KFold, StratifiedGroupKFold,
+                                     StratifiedKFold)
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "candidate" / "dataset.csv"
@@ -33,10 +34,27 @@ ASR_FAILURE_RE = re.compile(
 )
 
 
+def normalise(text: pd.Series) -> pd.Series:
+    """Lowercase, strip punctuation, collapse whitespace.
+
+    Used only to build the grouping key, so that '...' and '??? ???' -- the same
+    ASR failure written two ways -- cannot land on opposite sides of a split.
+    """
+    return (text.str.lower()
+                .str.replace(r"[^\w\s]", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip())
+
+
 def load() -> pd.DataFrame:
     df = pd.read_csv(DATA)
     df["asr_transcript"] = df["asr_transcript"].fillna("")
     df["word_confs"] = df["asr_word_confidences"].apply(json.loads)
+    # Grouping key. Deliberately COARSE: keyed on the normalised transcript
+    # alone, not on (language, prompt, transcript). A finer key makes more
+    # groups, and more groups means a weaker constraint -- the 34 transcripts
+    # that appear under two languages would be free to straddle a split.
+    df["group_key"] = normalise(df["asr_transcript"])
     return df
 
 
@@ -108,22 +126,52 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
+def feature_blocks(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """The structured features, split into named blocks so Part 2 can ablate.
+
+    `build_features` returns all of them concatenated; this returns them
+    separately, which is what the ablation matrix needs.
+    """
+    X = build_features(df)
+    return {
+        "length": X[["n_words", "n_chars", "mean_word_len", "type_token_ratio",
+                     "repeat_rate", "n_punct", "log_n_words"]],
+        "asr": X[["c_mean", "c_min", "c_max", "c_std", "c_p10", "c_p25",
+                  "c_first", "c_last", "c_frac_lt50", "c_frac_lt60", "c_range",
+                  "asr_failure_flag", "asr_failure_token_rate", "words_x_conf"]],
+        "lang": X[[c for c in X.columns if c.startswith("lang_")]],
+        "cefr": X[["cefr_ordinal"]],
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Splits
 # --------------------------------------------------------------------------- #
-def folds(df: pd.DataFrame, grouped: bool = True):
+def folds(df: pd.DataFrame, grouped: bool = True, stratified: bool = True):
     """Yield (train_idx, test_idx) positional index arrays.
 
     grouped=True groups by asr_transcript. Only 291 distinct transcripts back
     2,000 rows, so a random split puts near-copies of a test row into training
     and inflates every metric. Grouped is the honest setting; random is kept so
     part2 can quantify the gap.
+
+    stratified=True additionally balances the human_score distribution across
+    folds. The target runs 12/26/31/19/12 percent, and the rare 0s and 4s are
+    concentrated in a handful of transcripts -- with plain GroupKFold, whole
+    score bands can drift between folds, which adds variance to every metric.
+    Stratification here is best-effort: the group constraint wins whenever the
+    two conflict.
     """
+    y = df["human_score"]
     if grouped:
-        splitter = GroupKFold(n_splits=N_SPLITS)
-        return splitter.split(df, groups=df["asr_transcript"])
-    splitter = KFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
-    return splitter.split(df)
+        splitter = (StratifiedGroupKFold(n_splits=N_SPLITS, shuffle=True,
+                                         random_state=SEED)
+                    if stratified else GroupKFold(n_splits=N_SPLITS))
+        return splitter.split(df, y, groups=df["group_key"])
+    splitter = (StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=SEED)
+                if stratified else KFold(n_splits=N_SPLITS, shuffle=True,
+                                         random_state=SEED))
+    return splitter.split(df, y)
 
 
 # --------------------------------------------------------------------------- #
@@ -157,3 +205,19 @@ def human_ceiling(df: pd.DataFrame) -> dict[str, float]:
 
 def fmt(d: dict[str, float]) -> str:
     return "  ".join(f"{k}={v:.3f}" for k, v in d.items())
+
+
+def holdout_split(df: pd.DataFrame, test_size: float = 0.2):
+    """One group-aware 80/20 split: (train_idx, test_idx).
+
+    The test slice is scored ONCE, at the very end, by the single model chosen
+    on cross-validation over the training slice. Everything else -- model
+    selection, ablations, threshold tuning, error analysis -- happens inside
+    train. Cross-validation alone would leave no set that never influenced a
+    decision, and with this many comparisons that distinction matters.
+    """
+    n_folds = max(2, int(round(1 / test_size)))
+    splitter = StratifiedGroupKFold(n_splits=n_folds, shuffle=True, random_state=SEED)
+    train_idx, test_idx = next(iter(
+        splitter.split(df, df["human_score"], groups=df["group_key"])))
+    return train_idx, test_idx
