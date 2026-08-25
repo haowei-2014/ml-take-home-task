@@ -23,7 +23,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.sparse import csr_matrix, hstack, issparse
 from sklearn.decomposition import TruncatedSVD
-from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.preprocessing import StandardScaler
@@ -111,7 +111,7 @@ def assemble(df_tr, df_te, spec: Spec, dense: bool):
 class Model:
     name: str
     spec: Spec
-    kind: str                       # ridge | logreg | rf | hgb | const | cefr
+    kind: str                       # ridge | logreg | rf | const | cefr
     dense: bool = False
     extra: dict = field(default_factory=dict)
 
@@ -136,10 +136,7 @@ class Model:
             return RandomForestRegressor(n_estimators=300, min_samples_leaf=5,
                                          random_state=SEED, n_jobs=-1
                                          ).fit(Xtr, y_tr).predict(Xte)
-        return HistGradientBoostingRegressor(max_iter=400, learning_rate=0.06,
-                                             max_leaf_nodes=15, min_samples_leaf=20,
-                                             l2_regularization=1.0, random_state=SEED
-                                             ).fit(Xtr, y_tr).predict(Xte)
+        raise ValueError(f"unknown model kind: {self.kind}")
 
 
 def cv_predict(df, y, model: Model) -> np.ndarray:
@@ -235,14 +232,17 @@ that a chunk of the headline number is learner prior, not response quality.""")
 
     # ---------------------------------------------------------------- models
     h("3. Model families on the best feature set")
+    # M4 from the ablation above: all 28 structured columns, no TF-IDF. Held
+    # fixed across every model here so the comparison isolates the learner.
     best_spec = Spec(structured=STRUCTURED)
+    print(f"features held fixed: {best_spec.label()}  "
+          f"({sum(feature_blocks(train)[b].shape[1] for b in STRUCTURED)} columns)\n")
     fam = {
         "Ridge": Model("", best_spec, "ridge"),
         "LogReg (argmax)": Model("", best_spec, "logreg", extra={"readout": "argmax"}),
         "LogReg (expected score)": Model("", best_spec, "logreg",
                                          extra={"readout": "expected"}),
         "RandomForest": Model("", best_spec, "rf", dense=True),
-        "HistGBM": Model("", best_spec, "hgb", dense=True),
     }
     fres, foof = {}, {}
     for k, m in fam.items():

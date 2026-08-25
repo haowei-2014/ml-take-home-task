@@ -1,7 +1,7 @@
 """Part 1 -- exploratory analysis.
 
 Run:  uv run python solution/part1_analysis.py
-Writes figures to solution/figures/ and prints every number quoted in REPORT.md.
+Writes figures to solution/figures/; every number it prints is quoted in README.md.
 """
 from __future__ import annotations
 
