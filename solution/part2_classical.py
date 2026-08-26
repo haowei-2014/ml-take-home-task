@@ -12,6 +12,8 @@ Protocol
 """
 from __future__ import annotations
 
+print("Running Part 2 -- classical models.  Needs ~2 min.", flush=True)
+
 import time
 import warnings
 from dataclasses import dataclass, field

@@ -5,6 +5,8 @@ Writes figures to solution/figures/; every number it prints is quoted in README.
 """
 from __future__ import annotations
 
+print("Running Part 1 -- exploratory analysis.  Needs ~1 min.", flush=True)
+
 import numpy as np
 import pandas as pd
 import matplotlib

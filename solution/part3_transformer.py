@@ -9,6 +9,8 @@ Three experiments, all on Part 2's exact folds and exact held-out rows:
 """
 from __future__ import annotations
 
+print("Running Part 3 -- transformer experiments (T0/T1/T2).  Needs ~35 min on a laptop CPU.", flush=True)
+
 import sys
 import sys
 import time
