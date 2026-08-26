@@ -39,6 +39,10 @@ MAX_LEN = 128          # transcripts are short; actual batches come out ~42 toke
 EPOCHS = 4
 BATCH = 16
 LR = 3e-5
+# The head is randomly initialised while the encoder is pretrained. Training both
+# at 3e-5 leaves the head unable to use the structured stream at all -- T2 then
+# ties T1 exactly. See the AI collaboration log in the report.
+HEAD_LR = 1e-2
 STRUCTURED = ("length", "asr", "lang", "cefr")
 torch.set_num_threads(4)
 
@@ -197,14 +201,15 @@ def main() -> None:
     print(f"  {fmt(results['T0 frozen MiniLM + Ridge'])}   [{time.time() - t0:.0f}s]")
 
     # ---------------------------------------------------------------- T1, T2
-    for tag, use_struct, label in [
-            ("T1", False, "T1 MiniLM fine-tuned (text only)"),
-            ("T2", True, "T2 MiniLM fine-tuned + structured")]:
+    for tag, use_struct, hl, label in [
+            ("T1", False, None, "T1 MiniLM fine-tuned (text only)"),
+            ("T2", True, HEAD_LR, "T2 MiniLM fine-tuned + structured")]:
         h(f"{tag}. {label}")
         t0 = time.time()
         oof = np.zeros(len(train))
         for k, (a, b) in enumerate(folds(train, grouped=True)):
-            p, _, _ = fit_predict(train.iloc[a], y_tr[a], train.iloc[b], use_struct)
+            p, _, _ = fit_predict(train.iloc[a], y_tr[a], train.iloc[b],
+                                  use_struct, head_lr=hl)
             oof[b] = p
             print(f"  fold {k + 1}/5 done  [{time.time() - t0:.0f}s]", flush=True)
         results[label] = score_all(y_tr, oof)
@@ -225,7 +230,8 @@ def main() -> None:
                key=lambda k: results[k]["MAE"])
     print(f"best transformer on CV: {best}\n")
     pred_te, model, tok2 = fit_predict(train, y_tr, test, best.startswith("T2"),
-                                       quiet=False)
+                                       quiet=False,
+                                       head_lr=HEAD_LR if best.startswith("T2") else None)
     s_te = score_all(y_te, pred_te)
     print(f"\n  {best}")
     print(f"    CV over train : {fmt(results[best])}")
@@ -279,8 +285,7 @@ def figure() -> None:
     train = full.iloc[tr_i].reset_index(drop=True)
     y = train["human_score"].to_numpy()
     rf = to_labels(np.load(FIGDIR.parent / "oof_part2.npy"))
-    # part3_headlr.py produced the repaired T2 after main() ran, so score it here.
-    t2_cont = np.load(FIGDIR.parent / "oof_t2_hl0.01.npy")
+    t2_cont = np.load(FIGDIR.parent / "oof_t2.npy")
     res = pd.read_csv(FIGDIR.parent / "part3_results.csv", index_col=0)
     res = res.drop(index="T2 MiniLM fine-tuned + structured")
     res.loc["T2 fine-tuned + structured"] = score_all(y, t2_cont)
