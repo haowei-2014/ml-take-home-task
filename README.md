@@ -35,7 +35,7 @@ derived, so they are not in the repo. Once Part 3 has run,
 
 ---
 
-## 1. What the data forced me to do
+## 1. Part 1 — Data analysis
 
 **Only 291 distinct transcripts back the 2,000 rows; 94% of rows share their text
 with another row.** To size the risk I built a probe that cannot generalise at
@@ -103,7 +103,7 @@ budget.
 
 ---
 
-## 4. Why this model
+## 4. Part 2 — Classical ML
 
 All models draw on five feature blocks, none of which requires reading a
 particular language:
@@ -176,7 +176,7 @@ I would watch in production.
 
 ---
 
-## 5. Part 3 — transformer
+## 5. Part 3 — Transformer
 
 `paraphrase-multilingual-MiniLM-L12-v2` (118M parameters, 12 layers). Multilingual,
 so one model covers all five languages; small enough to fine-tune on a laptop CPU
