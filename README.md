@@ -29,8 +29,9 @@ uv run python solution/part3_transformer.py  # T0 / T1 / T2, ~35 min CPU
 Run them in order. `solution/common.py` holds the data, features, splits and
 metrics shared by all parts, so Part 3 is scored on the same folds and the same
 held-out rows as Part 2 — and reads the out-of-fold predictions Part 2 writes.
-`part3_transformer.py figure` redraws the Part 3 figure from the saved
-predictions in seconds, without the 35-minute rerun.
+Each script writes its out-of-fold predictions next to itself; those files are
+derived, so they are not in the repo. Once Part 3 has run,
+`part3_transformer.py figure` redraws its figure from them in seconds.
 
 ---
 
@@ -214,13 +215,17 @@ of the gain is the structured columns, not the text.
 | RandomForest (300 trees), incl. featurising | 8.4 / 8.6 ms | 1 | a few MB |
 | T2 MiniLM + structured, incl. tokenising | 10.0 / 11.3 ms | 4 | 471 MB fp32 |
 
-Both fit the 300 ms budget with room to spare — but the encoder needs four
-threads to get there, and at millions of learners the 0.5 GB is the real bill:
-it decides how many workers fit on a box. 82% of those parameters are the
-250k-token multilingual vocabulary embedding, most of which five languages
-never address, so trimming the vocabulary and int8-quantising the linear layers
-would plausibly reach ~40 MB. I did not do that work — a 471 MB model that only
-ties a few-MB one has not earned it.
+Both fit the 300 ms budget. But the forest uses one thread and the encoder uses
+four, so the encoder costs about 5x the CPU per answer.
+82% of those parameters are the 250k-token multilingual
+vocabulary embedding, most of which five languages never address, so trimming
+the vocabulary and int8-quantising the linear layers would plausibly reach
+~40 MB. I did not do that work — a 471 MB model that only ties a few-MB one has
+not earned it.
+
+Cost is not only ms and MB. The forest is a scikit-learn pickle. The encoder
+brings a PyTorch + HuggingFace serving stack, a 471 MB file in every image
+build, and a tokeniser pinned to the weights.
 
 ---
 
@@ -254,20 +259,7 @@ what tells me how bad that degradation is.
 
 ---
 
-## 7. Limitations
-
-**The model never predicts 0, and predicts 4 twice in 403 rows.** Of 47 responses
-scored 4 by a human, it called 43 a 2 or 3. This is regression-to-the-mean plus
-rounding at .5.
-It matters for the product: the app cannot tell "excellent, move on" from "that
-didn't work, re-prompt" if the scorer only emits the middle. The transformer does
-it too — it never predicts 0 and predicts 4 eleven times in 1,597 — so this is a
-property of the objective, not of the model family. Fix is to fit cut points on
-inner-CV predictions — not yet done.
-
----
-
-## 8. Next step
+## 7. Next step
 
 **The raters scored three things** — grammar, relevance & completeness,
 intelligibility. **Grammar and relevance have no
@@ -286,7 +278,7 @@ My team ane me at NIO worked on a similar problem where we developed a text + au
 
 ---
 
-## 9. AI collaboration log
+## 8. AI collaboration log
 
 **Claude Code** (Opus) for implementation, **ChatGPT** for planning the Part 2
 experiment structure. I worked section by section rather than requesting a
