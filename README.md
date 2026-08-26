@@ -270,23 +270,19 @@ inner-CV predictions — not yet done.
 ## 8. Next step
 
 **The raters scored three things** — grammar, relevance & completeness,
-intelligibility, roughly equally weighted. **grammar and relevance have no
-feature at all**. That gap, not model capacity, is what Part 3 ran into.
+intelligibility. **Grammar and relevance have no
+feature at all**. 
 
-Two of the three close on the transcripts I already have — what is missing is
-external knowledge, not more data:
+What is missing is external knowledge, not more data:
 
 - **Grammar** — errors per 100 words from LanguageTool (multilingual, offline).
   One column.
 - **Relevance** — `cos(prompt, transcript)` from a *frozen* multilingual encoder.
 
-**Then the audio.** The variance decomposition says 46% of the target is real
-signal my features cannot see, and intelligibility is a third of the rubric that
-no transcript can carry. Even coarse acoustic features — speech rate, pause count,
-duration — would likely move the number more than any modelling change on the
-current inputs. Part 3 is the evidence: a 118M-parameter multilingual encoder —
-the largest modelling change available on this input — only drew level with the
-forest. Change the input, not the model.
+**Use the audio.** The input does not fully align with labels: input is text, 
+and labels is from both text and audios. It is worth trying text + audio as input. 
+My team ane me at NIO worked on a similar problem where we developed a text + audio joint model.
+[See our published paper.](https://arxiv.org/pdf/2409.09289)
 
 ---
 
@@ -294,9 +290,7 @@ forest. Change the input, not the model.
 
 **Claude Code** (Opus) for implementation, **ChatGPT** for planning the Part 2
 experiment structure. I worked section by section rather than requesting a
-finished solution, and rejected output I could not read.
-
-Things the AI got wrong that I caught:
+finished solution. Things the AI got wrong that I caught:
 
 1 **An overstated ceiling.** Rater 1 vs Rater 2, QWK=0.795. 
 It is not a hard cap and now says "soft benchmark".
