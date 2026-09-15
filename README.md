@@ -1,4 +1,6 @@
-# Automated learner-response scoring
+# Berlitz Automated learner-response scoring
+
+Job description: https://www.linkedin.com/jobs/view/4441997655/
 
 A RandomForest on 28 length / ASR-confidence / CEFR features scores **MAE 0.784,
 QWK 0.398, 85.6% within ±1** on held-out data it was shown once, in 8.4 ms on one
